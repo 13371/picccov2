@@ -53,3 +53,26 @@ export async function apiPost(path: string, body?: any): Promise<any> {
   return await res.json();
 }
 
+
+export async function apiPatch(path: string, body?: any): Promise<any> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers.Authorization = "Bearer " + token;
+  }
+
+  const res = await fetch(API_BASE + path, {
+    method: "PATCH",
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status} ${text}`);
+  }
+
+  return await res.json();
+}
