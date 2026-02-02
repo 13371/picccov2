@@ -1,0 +1,19 @@
+{
+  "name": "piccco-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo with Next.js frontend and NestJS backend",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter frontend dev\" \"pnpm --filter backend dev\"",
+    "build": "pnpm --recursive build",
+    "install:all": "pnpm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
+
