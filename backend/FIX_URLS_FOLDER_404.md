@@ -318,3 +318,4 @@ Write-Host "`n✅ 所有测试完成！" -ForegroundColor Green
    - kind 不匹配：400 "文件夹类型与项目类型不匹配：..."
 4. ✅ 保持隐私硬拦截：普通接口永远不返回 `isPrivate=true` 的 folder/item
 
+

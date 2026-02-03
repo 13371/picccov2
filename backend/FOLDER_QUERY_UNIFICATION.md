@@ -362,3 +362,4 @@ Write-Host "`n✅ 所有验证完成！" -ForegroundColor Green
 4. ✅ **替换所有直接查询**: `updateFolder` 和 `deleteFolder` 都使用 `getPublicFolderById`
 5. ✅ **保持隐私硬拦截**: 普通接口永远拿不到 `isPrivate=true` 的 folder
 
+

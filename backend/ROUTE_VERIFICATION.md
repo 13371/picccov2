@@ -182,3 +182,4 @@ curl -X POST http://localhost:3001/auth/verify-code \
   -d '{"email": "test@example.com", "code": "123456"}'
 ```
 
+

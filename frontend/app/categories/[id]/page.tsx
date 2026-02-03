@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { apiGet, apiPost } from "../../../lib/api";
 
 interface Note {
@@ -11,6 +11,7 @@ interface Note {
 
 export default function CategoryDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const folderId = params.id as string;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,22 +44,44 @@ export default function CategoryDetailPage() {
   }, [folderId]);
 
   // 创建新 NOTE
-  const createNote = async () => {
+  const createNote = async (e: React.MouseEvent) => {
+    // 阻断事件冒泡，防止触发父层点击事件
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!folderId || creating) return;
 
     try {
       setCreating(true);
-      await apiPost("/items", {
+      const resp = await apiPost("/items", {
         type: "NOTE",
         title: "新笔记",
         content: "新建笔记",
         folderId,
       });
-      // 创建成功后刷新列表
-      await loadNotes();
+      
+      // 创建成功后跳转到新笔记详情页
+      // 后端返回格式: { success: true, data: item }
+      const newNoteId = resp.data?.id || resp.id;
+      
+      // 绝对禁止fallback：如果newNoteId取不到就报错
+      if (!newNoteId) {
+        throw new Error("创建成功但未返回笔记ID，响应数据：" + JSON.stringify(resp));
+      }
+
+      // 创建成功后，将新笔记添加到列表顶部（prepend）
+      const newNote: Note = {
+        id: newNoteId,
+        title: resp.data?.title || "新笔记",
+      };
+      setNotes((prev) => [newNote, ...prev]);
+
+      // 跳转到新笔记详情页
+      router.push(`/notes/${newNoteId}`);
     } catch (err) {
       console.error("创建失败:", err);
-      alert("创建失败");
+      const errorMsg = err instanceof Error ? err.message : "创建失败";
+      alert(errorMsg);
     } finally {
       setCreating(false);
     }
@@ -97,10 +120,21 @@ export default function CategoryDetailPage() {
           {notes.map((note) => (
             <div
               key={note.id}
+              onClick={() => router.push(`/notes/${note.id}`)}
               style={{
+                display: "block",
                 marginBottom: "16px",
-                paddingBottom: "16px",
+                padding: "12px",
                 borderBottom: "1px solid #e0e0e0",
+                cursor: "pointer",
+                borderRadius: "4px",
+                transition: "background-color 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#f5f5f5";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
               }}
             >
               <div style={{ fontSize: "16px", color: "#333" }}>
