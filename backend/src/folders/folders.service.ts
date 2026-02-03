@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrivateService } from '../private/private.service';
 import { FolderKind } from '@prisma/client';
 
 @Injectable()
 export class FoldersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private privateService: PrivateService,
+  ) {}
 
   /**
    * 获取普通folders列表（硬拦截：排除隐私folders）
@@ -24,6 +28,29 @@ export class FoldersService {
         updatedAt: 'desc',
       },
     });
+  }
+
+  /**
+   * 获取隐私文件夹元信息（只返回入口信息，不返回内容）
+   * 即使未解锁也允许返回（因为这是"入口"，不包含 items，不泄露内容）
+   * 若用户没有 private folder：返回 null
+   */
+  async getPrivateFolderMeta(userId: string) {
+    const folder = await this.prisma.folder.findFirst({
+      where: {
+        userId,
+        isPrivate: true,
+        kind: FolderKind.NOTES, // 隐私文件夹只支持 NOTES
+      },
+      select: {
+        id: true,
+        name: true,
+        isPrivate: true,
+        kind: true,
+      },
+    });
+
+    return folder || null;
   }
 
   /**
@@ -49,22 +76,47 @@ export class FoldersService {
 
   /**
    * 获取普通folder详情（硬拦截：只返回非隐私 folder，不限制 kind）
+   * 如果 folder 是 private 且未解锁，返回 403
    */
   async getPublicFolder(userId: string, folderId: string) {
-    return this.getPublicFolderById(userId, folderId);
+    // 先检查 folder 是否存在
+    const folder = await this.prisma.folder.findFirst({
+      where: {
+        id: folderId,
+        userId,
+      },
+    });
+
+    if (!folder) {
+      throw new NotFoundException('文件夹不存在');
+    }
+
+    // 如果是 private folder，检查解锁状态
+    if (folder.isPrivate) {
+      const isUnlocked = this.privateService.isUnlocked(userId);
+      if (!isUnlocked) {
+        throw new ForbiddenException({ message: 'private locked', statusCode: 403 });
+      }
+      // 已解锁，返回 folder
+      return folder;
+    }
+
+    // 非 private folder，正常返回
+    return folder;
   }
 
   /**
    * 根据 ID 获取普通 folder（硬拦截：只返回非隐私 folder，不限制 kind）
    * 全项目唯一的"普通 folder 查询"方法
    * 用于 ItemsService 等需要验证 folder 的场景
+   * 如果 folder 是 private 且未解锁，返回 403
    */
   async getPublicFolderById(userId: string, folderId: string) {
+    // 先检查 folder 是否存在
     const folder = await this.prisma.folder.findFirst({
       where: {
         id: folderId,
         userId,
-        isPrivate: false,
       },
     });
 
@@ -72,6 +124,20 @@ export class FoldersService {
       throw new NotFoundException('文件夹不存在或无权访问');
     }
 
+    // 如果是 private folder，检查解锁状态
+    if (folder.isPrivate) {
+      const isUnlocked = this.privateService.isUnlocked(userId);
+      if (!isUnlocked) {
+        throw new ForbiddenException({ message: 'private locked', statusCode: 403 });
+      }
+      // 已解锁，返回 folder（但这个方法原本只返回非隐私，所以这里应该抛出异常？）
+      // 实际上，如果已解锁，应该允许访问，但这个方法名是 getPublicFolderById，语义上只返回 public
+      // 为了保持语义，这里仍然抛出异常，让调用方知道这是 private folder
+      // 但按照需求，如果已解锁应该可以访问，所以这里返回 folder
+      return folder;
+    }
+
+    // 非 private folder，正常返回
     return folder;
   }
 

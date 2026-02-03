@@ -34,15 +34,46 @@ async function apiFetch(path: string, init?: RequestInit) {
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${res.status} ${text}`);
+    // 统一错误处理
+    let errorMessage = '';
+    try {
+      const json = await res.json();
+      errorMessage = json.message || JSON.stringify(json);
+    } catch {
+      const text = await res.text();
+      errorMessage = text || `${res.status}`;
+    }
+
+    // 401：token 无效，清除 token 并跳转登录
+    if (res.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('piccco_token');
+        window.location.href = '/login';
+      }
+      throw new Error('未授权，请重新登录');
+    }
+
+    // 403 且 message 包含 "private"：跳转解锁页面
+    if (res.status === 403 && errorMessage.includes('private')) {
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname + window.location.search;
+        window.location.href = `/unlock?next=${encodeURIComponent(currentPath)}`;
+      }
+      throw new Error('需要隐私解锁');
+    }
+
+    // 其他错误
+    throw new Error(errorMessage || `${res.status}`);
   }
 
   return res;
 }
 
-export async function apiGet(path: string): Promise<any> {
-  const res = await apiFetch(path, { method: "GET" });
+// 导出 apiFetch 供外部使用（用于 fire and forget 场景）
+export { apiFetch };
+
+export async function apiGet(path: string, signal?: AbortSignal): Promise<any> {
+  const res = await apiFetch(path, { method: "GET", signal });
   return res.json();
 }
 
@@ -58,6 +89,13 @@ export async function apiPatch(path: string, body?: any): Promise<any> {
   const res = await apiFetch(path, {
     method: "PATCH",
     body: body ? JSON.stringify(body) : undefined,
+  });
+  return res.json();
+}
+
+export async function apiDelete(path: string): Promise<any> {
+  const res = await apiFetch(path, {
+    method: "DELETE",
   });
   return res.json();
 }

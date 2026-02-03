@@ -86,6 +86,7 @@ model Item {
   folderId  String? // 可为空，表示"未分类"
   userId    String
   isStarred Boolean   @default(false)
+  isDraft   Boolean   @default(false) // 是否为草稿（白框内容）
   deletedAt DateTime? // 软删除时间戳（tombstone）
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt // 用于同步排序

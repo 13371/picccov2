@@ -4,27 +4,27 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
 const tabs = [
-  { path: '/home', label: 'Home', icon: '🏠' },
-  { path: '/urls', label: 'URLs', icon: '🔗' },
-  { path: '/categories', label: 'Categories', icon: '📁' },
-  { path: '/me', label: 'Me', icon: '👤' },
+  { path: '/home', label: '首页' },
+  { path: '/urls', label: '网址' },
+  { path: '/categories', label: '分类' },
+  { path: '/me', label: '我的' },
 ];
 
 export default function TabBar() {
   const pathname = usePathname();
 
   return (
-    <nav className="tab-bar">
+    <nav className="tab-bar-top">
       {tabs.map((tab) => {
-        const isActive = pathname === tab.path;
+        // 支持 / 和 /home 都匹配首页
+        const isActive = pathname === tab.path || (tab.path === '/home' && pathname === '/');
         return (
           <Link
             key={tab.path}
             href={tab.path}
-            className={`tab-item ${isActive ? 'active' : ''}`}
+            className={`tab-item-top ${isActive ? 'active' : ''}`}
           >
-            <span className="tab-icon">{tab.icon}</span>
-            <span className="tab-label">{tab.label}</span>
+            {tab.label}
           </Link>
         );
       })}

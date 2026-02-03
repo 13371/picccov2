@@ -18,12 +18,19 @@ body {
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
 }
 
-/* Header 固定顶部 */
-.header {
-  position: fixed;
+/* 顶部固定容器（Header + TabBar） */
+.top-fixed-container {
+  position: sticky;
   top: 0;
   left: 0;
   right: 0;
+  z-index: 100;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Header 固定顶部 */
+.header {
   height: 56px;
   background: #fff;
   border-bottom: 1px solid #e0e0e0;
@@ -31,14 +38,12 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  z-index: 10;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .header-button {
   border: none;
   background: transparent;
-  font-size: 14px;
+  font-size: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -48,6 +53,7 @@ body {
   transition: background-color 0.2s;
   color: #333;
   font-weight: 500;
+  min-width: 40px;
 }
 
 .header-button:hover {
@@ -65,26 +71,19 @@ body {
   margin: 0;
 }
 
-/* TabBar 固定底部 */
-.tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
+/* TabBar 顶部导航 */
+.tab-bar-top {
+  height: 48px;
   background: #fff;
-  border-top: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
   display: flex;
   align-items: center;
   justify-content: space-around;
-  z-index: 10;
-  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.tab-item {
+.tab-item-top {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 8px;
@@ -92,29 +91,21 @@ body {
   color: #999;
   transition: color 0.2s;
   height: 100%;
-  border-top: 2px solid transparent;
+  font-size: 14px;
+  border-bottom: 2px solid transparent;
 }
 
-.tab-item.active {
+.tab-item-top.active {
   color: #007aff;
   font-weight: 600;
-  border-top: 2px solid #007aff;
-}
-
-.tab-icon {
-  font-size: 20px;
-  margin-bottom: 4px;
-}
-
-.tab-label {
-  font-size: 12px;
+  border-bottom: 2px solid #007aff;
 }
 
 /* 主内容区域 */
 .main-content {
-  padding-top: 56px; /* Header 高度 */
-  padding-bottom: 60px; /* TabBar 高度 */
-  min-height: 100vh;
+  padding-top: 0;
+  padding-bottom: 0;
+  min-height: calc(100vh - 104px); /* 100vh - header(56px) - tabbar(48px) */
   overflow-y: auto;
 }
 

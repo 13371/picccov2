@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FoldersService } from '../folders/folders.service';
+import { PrivateService } from '../private/private.service';
 import { ItemType, FolderKind } from '@prisma/client';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class ItemsService {
   constructor(
     private prisma: PrismaService,
     private foldersService: FoldersService,
+    private privateService: PrivateService,
   ) {}
 
   /**
@@ -18,6 +20,7 @@ export class ItemsService {
     type: ItemType,
     folderId?: string,
     includeUnfiled: boolean = false,
+    includeDraft: boolean = false,
   ) {
     if (!type || (type !== 'NOTE' && type !== 'URL')) {
       throw new BadRequestException('type 参数必传，且必须是 NOTE 或 URL');
@@ -27,20 +30,26 @@ export class ItemsService {
       userId,
       type: type as ItemType,
       deletedAt: null,
+      // 默认排除草稿，除非明确指定 includeDraft=true
+      isDraft: includeDraft ? undefined : false,
     };
 
     if (folderId) {
       // 根据 type 得到 expectedKind
       const expectedKind = type === 'NOTE' ? FolderKind.NOTES : FolderKind.URLS;
 
-      // 使用 FoldersService 获取 folder（确保非隐私且属于当前用户）
+      // 使用 FoldersService 获取 folder（会检查 private 和解锁状态）
       let folder;
       try {
         folder = await this.foldersService.getPublicFolderById(userId, folderId);
       } catch (error) {
-        // 如果 folder 不存在或无权访问，返回 404
+        // 如果 folder 不存在，返回 404
         if (error instanceof NotFoundException) {
           throw new NotFoundException('文件夹不存在');
+        }
+        // 如果是 403（private locked），直接抛出
+        if (error instanceof ForbiddenException) {
+          throw error;
         }
         throw error;
       }
@@ -124,6 +133,7 @@ export class ItemsService {
 
   /**
    * 获取普通item详情（硬拦截）
+   * 如果 item 属于 private folder 且未解锁，返回 403
    */
   async getPublicItem(userId: string, itemId: string) {
     const item = await this.prisma.item.findFirst({
@@ -131,9 +141,6 @@ export class ItemsService {
         id: itemId,
         userId,
         deletedAt: null,
-        folder: {
-          isPrivate: false, // 硬拦截：永远不返回隐私 item
-        },
       },
       include: {
         folder: {
@@ -141,16 +148,27 @@ export class ItemsService {
             id: true,
             name: true,
             kind: true,
+            isPrivate: true,
           },
         },
       },
     });
 
     if (!item) {
-      // 如果 item 不存在、已删除或属于隐私 folder，统一返回 404
       throw new NotFoundException('项目不存在');
     }
 
+    // 如果 item 属于 private folder，检查解锁状态
+    if (item.folder?.isPrivate) {
+      const isUnlocked = this.privateService.isUnlocked(userId);
+      if (!isUnlocked) {
+        throw new ForbiddenException({ message: 'private locked', statusCode: 403 });
+      }
+      // 已解锁，返回 item
+      return item;
+    }
+
+    // 非 private item，正常返回
     return item;
   }
 
@@ -197,6 +215,7 @@ export class ItemsService {
       content?: string;
       url?: string;
       folderId?: string | null;
+      isDraft?: boolean;
     },
   ) {
     // 验证必填字段
@@ -212,19 +231,24 @@ export class ItemsService {
       throw new BadRequestException('title 最多 10 个字符');
     }
 
-    // 如果提供了 folderId，验证 folder 存在且非隐私，且 kind 匹配
+    // 如果提供了 folderId，验证 folder 存在且 kind 匹配
+    // 如果是 private folder，检查解锁状态
     if (data.folderId) {
       // 根据 item.type 得到 expectedKind
       const expectedKind = data.type === ItemType.NOTE ? FolderKind.NOTES : FolderKind.URLS;
 
-      // 使用 FoldersService 获取 folder（确保非隐私且属于当前用户）
+      // 使用 FoldersService 获取 folder（会检查 private 和解锁状态）
       let folder;
       try {
         folder = await this.foldersService.getPublicFolderById(userId, data.folderId);
       } catch (error) {
-        // 如果 folder 不存在或无权访问，返回 404
+        // 如果 folder 不存在，返回 404
         if (error instanceof NotFoundException) {
           throw new NotFoundException('文件夹不存在或无权访问');
+        }
+        // 如果是 403（private locked），直接抛出
+        if (error instanceof ForbiddenException) {
+          throw error;
         }
         throw error;
       }
@@ -246,6 +270,7 @@ export class ItemsService {
         folderId: data.folderId || null,
         userId,
         isStarred: false,
+        isDraft: data.isDraft || false,
       },
       include: {
         folder: {
@@ -261,6 +286,7 @@ export class ItemsService {
 
   /**
    * 更新普通 item
+   * 如果 item 属于 private folder 且未解锁，返回 403
    */
   async updateItem(
     userId: string,
@@ -279,17 +305,29 @@ export class ItemsService {
         id: itemId,
         userId,
         deletedAt: null,
-        folder: {
-          isPrivate: false, // 硬拦截：不能更新隐私 item
-        },
       },
       include: {
-        folder: true,
+        folder: {
+          select: {
+            id: true,
+            name: true,
+            kind: true,
+            isPrivate: true,
+          },
+        },
       },
     });
 
     if (!item) {
       throw new NotFoundException('项目不存在');
+    }
+
+    // 如果 item 属于 private folder，检查解锁状态
+    if (item.folder?.isPrivate) {
+      const isUnlocked = this.privateService.isUnlocked(userId);
+      if (!isUnlocked) {
+        throw new ForbiddenException({ message: 'private locked', statusCode: 403 });
+      }
     }
 
     // 验证 title 长度
@@ -299,20 +337,25 @@ export class ItemsService {
       }
     }
 
-    // 如果更新 folderId，验证 folder 存在且非隐私，且 kind 匹配
+    // 如果更新 folderId，验证 folder 存在且 kind 匹配
+    // 如果是 private folder，检查解锁状态
     if (data.folderId !== undefined) {
       if (data.folderId) {
         // 根据 item.type 得到 expectedKind
         const expectedKind = item.type === ItemType.NOTE ? FolderKind.NOTES : FolderKind.URLS;
 
-        // 使用 FoldersService 获取 folder（确保非隐私且属于当前用户）
+        // 使用 FoldersService 获取 folder（会检查 private 和解锁状态）
         let folder;
         try {
           folder = await this.foldersService.getPublicFolderById(userId, data.folderId);
         } catch (error) {
-          // 如果 folder 不存在或无权访问，返回 404
+          // 如果 folder 不存在，返回 404
           if (error instanceof NotFoundException) {
             throw new NotFoundException('文件夹不存在或无权访问');
+          }
+          // 如果是 403（private locked），直接抛出
+          if (error instanceof ForbiddenException) {
+            throw error;
           }
           throw error;
         }
@@ -355,6 +398,7 @@ export class ItemsService {
 
   /**
    * 删除普通 item（软删）
+   * 如果 item 属于 private folder 且未解锁，返回 403
    */
   async deleteItem(userId: string, itemId: string) {
     const item = await this.prisma.item.findFirst({
@@ -362,15 +406,29 @@ export class ItemsService {
         id: itemId,
         userId,
         deletedAt: null,
+      },
+      include: {
         folder: {
-          isPrivate: false, // 硬拦截：不能删除隐私 item
+          select: {
+            id: true,
+            name: true,
+            kind: true,
+            isPrivate: true,
+          },
         },
       },
     });
 
     if (!item) {
-      // 如果 item 不存在、已删除或属于隐私 folder，统一返回 404
       throw new NotFoundException('项目不存在');
+    }
+
+    // 如果 item 属于 private folder，检查解锁状态
+    if (item.folder?.isPrivate) {
+      const isUnlocked = this.privateService.isUnlocked(userId);
+      if (!isUnlocked) {
+        throw new ForbiddenException({ message: 'private locked', statusCode: 403 });
+      }
     }
 
     return this.prisma.item.update({
@@ -524,10 +582,12 @@ export class ItemsService {
 
     // 硬拦截：永远不返回隐私 folder 下的 items
     // 需要处理 folderId 为 null 的情况
+    // 默认排除草稿（isDraft=false）
     const where: any = {
       userId,
       type: type as ItemType,
       deletedAt: null,
+      isDraft: false, // 搜索不包含草稿
       OR: [
         { folderId: null }, // 未分类的 items
         {

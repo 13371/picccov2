@@ -16,11 +16,13 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body>
-        <Header />
+        <div className="top-fixed-container">
+          <Header />
+          <TabBar />
+        </div>
         <main className="main-content">
           {children}
         </main>
-        <TabBar />
       </body>
     </html>
   )

@@ -10,6 +10,7 @@ class CreateItemDto {
   content?: string;
   url?: string;
   folderId?: string | null;
+  isDraft?: boolean;
 }
 
 class UpdateItemDto {
@@ -34,12 +35,14 @@ export class ItemsController {
     @Query('type') type: string,
     @Query('folderId') folderId?: string,
     @Query('includeUnfiled') includeUnfiled?: string,
+    @Query('includeDraft') includeDraft?: string,
   ) {
     const items = await this.itemsService.getPublicItems(
       req.user.userId,
       type as ItemType,
       folderId,
       includeUnfiled === 'true',
+      includeDraft === 'true',
     );
     return {
       success: true,
@@ -58,6 +61,7 @@ export class ItemsController {
       content: dto.content,
       url: dto.url,
       folderId: dto.folderId,
+      isDraft: dto.isDraft,
     });
     return {
       success: true,

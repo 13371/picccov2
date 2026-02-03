@@ -32,6 +32,25 @@ export class FoldersController {
   }
 
   /**
+   * 获取隐私文件夹元信息（只返回入口信息，不返回内容）
+   * 即使未解锁也允许返回（因为这是"入口"，不包含 items，不泄露内容）
+   */
+  @Get('private-meta')
+  async getPrivateFolderMeta(@Request() req) {
+    const folder = await this.foldersService.getPrivateFolderMeta(req.user.userId);
+    if (!folder) {
+      return {
+        success: true,
+        data: null,
+      };
+    }
+    return {
+      success: true,
+      data: folder,
+    };
+  }
+
+  /**
    * 创建文件夹
    */
   @Post()
