@@ -4,6 +4,9 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getToken } from "../lib/auth";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import MoreMenuButton from "@/components/MoreMenuButton";
+import ConfirmDialog from "../components/ConfirmDialog";
+import AlertDialog from "../components/AlertDialog";
 
 interface Note {
   id: string;
@@ -58,6 +61,27 @@ export default function HomePage() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showMenuId, setShowMenuId] = useState<string | null>(null);
+  
+  // 对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+    danger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    open: false,
+    message: "",
+    onConfirm: async () => {},
+  });
+  const [alertDialog, setAlertDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+  }>({
+    open: false,
+    message: "",
+  });
 
   // 检查登录状态
   useEffect(() => {
@@ -207,7 +231,7 @@ export default function HomePage() {
       } catch (err: any) {
         console.error("保存失败:", err);
         setSaveStatus("error");
-        alert(err?.message || "保存失败");
+        setAlertDialog({ open: true, message: err?.message || "保存失败" });
       } finally {
         setSaving(false);
       }
@@ -247,37 +271,40 @@ export default function HomePage() {
   };
 
   // 删除 NOTE
-  const handleDelete = async (noteId: string, e: React.MouseEvent) => {
+  const handleDelete = (noteId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // 二次确认
-    const confirmed = window.confirm("确认删除该记事？此操作不可恢复。");
-    if (!confirmed) {
-      return;
-    }
+    setConfirmDialog({
+      open: true,
+      title: "确认删除",
+      message: "确认删除该记事？此操作不可恢复。",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setDeletingId(noteId);
+          setConfirmDialog({ ...confirmDialog, open: false });
+          await apiDelete(`/items/${noteId}`);
 
-    try {
-      setDeletingId(noteId);
-      await apiDelete(`/items/${noteId}`);
+          // 如果删除的是当前草稿，清空草稿状态和localStorage
+          if (noteId === draftId) {
+            setDraftId(null);
+            setDraftContent("");
+            localStorage.removeItem("piccco_home_draft_id");
+          }
 
-      // 如果删除的是当前草稿，清空草稿状态和localStorage
-      if (noteId === draftId) {
-        setDraftId(null);
-        setDraftContent("");
-        localStorage.removeItem("piccco_home_draft_id");
-      }
-
-      // 删除成功后刷新列表
-      await loadNotes();
-      alert("删除成功");
-    } catch (err: any) {
-      console.error("删除失败:", err);
-      alert(err?.message || "删除失败");
-    } finally {
-      setDeletingId(null);
-      setShowMenuId(null);
-    }
+          // 删除成功后刷新列表
+          await loadNotes();
+          setAlertDialog({ open: true, message: "删除成功" });
+        } catch (err: any) {
+          console.error("删除失败:", err);
+          setAlertDialog({ open: true, message: err?.message || "删除失败" });
+        } finally {
+          setDeletingId(null);
+          setShowMenuId(null);
+        }
+      },
+    });
   };
 
   // 切换星标
@@ -294,7 +321,7 @@ export default function HomePage() {
       setShowMenuId(null);
     } catch (err: any) {
       console.error("操作失败:", err);
-      alert(err?.message || "操作失败");
+      setAlertDialog({ open: true, message: err?.message || "操作失败" });
     }
   };
 
@@ -441,39 +468,15 @@ export default function HomePage() {
               </div>
 
               {/* 右侧操作按钮 */}
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <button
-                  onClick={() => router.push(`/notes/${note.id}`)}
-                  style={{
-                    padding: "6px 12px",
-                    fontSize: "12px",
-                    backgroundColor: "#007bff",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                  }}
-                >
-                  编辑
-                </button>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingRight: "12px" }}>
                 <div style={{ position: "relative" }}>
-                  <button
+                  <MoreMenuButton
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       setShowMenuId(showMenuId === note.id ? null : note.id);
                     }}
-                    style={{
-                      padding: "6px 8px",
-                      fontSize: "16px",
-                      backgroundColor: "transparent",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "#666",
-                    }}
-                  >
-                    ⋮
-                  </button>
+                  />
                   {/* 菜单 */}
                   {showMenuId === note.id && (
                     <div
@@ -565,6 +568,24 @@ export default function HomePage() {
           onClick={() => setShowMenuId(null)}
         />
       )}
+
+      {/* 确认对话框 */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        danger={confirmDialog.danger}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ ...confirmDialog, open: false })}
+      />
+
+      {/* 提示对话框 */}
+      <AlertDialog
+        open={alertDialog.open}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        onClose={() => setAlertDialog({ ...alertDialog, open: false })}
+      />
     </div>
   );
 }

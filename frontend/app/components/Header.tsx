@@ -1,28 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { apiPost } from '@/lib/api';
 
 export default function Header() {
   const router = useRouter();
 
-  const handleNewNote = async () => {
-    try {
-      // 快速新建NOTE到未分类（folderId=null）
-      const res = await apiPost('/items', {
-        type: 'NOTE',
-        title: '',
-        content: '',
-        folderId: null,
-      });
-      
-      // 成功后跳转到编辑页面
-      if (res?.data?.id) {
-        router.push(`/notes/${res.data.id}`);
-      }
-    } catch (error: any) {
-      alert(error?.message || '创建失败');
-    }
+  const handleNewNote = () => {
+    // 直接跳转到新建页，不先 POST
+    // 这样点击取消不会产生空白 note（满足硬规则）
+    router.push('/notes/new?from=quick');
   };
 
   const handleSearch = () => {

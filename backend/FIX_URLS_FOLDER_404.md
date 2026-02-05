@@ -319,3 +319,4 @@ Write-Host "`n✅ 所有测试完成！" -ForegroundColor Green
 4. ✅ 保持隐私硬拦截：普通接口永远不返回 `isPrivate=true` 的 folder/item
 
 
+

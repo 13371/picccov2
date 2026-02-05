@@ -78,6 +78,17 @@ export async function apiGet(path: string, signal?: AbortSignal): Promise<any> {
 }
 
 export async function apiPost(path: string, body?: any): Promise<any> {
+  // 调试：记录发送前的 body（用于排查 content 字段是否被清理）
+  if (body && typeof body === 'object') {
+    const stringified = JSON.stringify(body);
+    console.log(`[apiPost] ${path} - Request body before stringify:`, body);
+    console.log(`[apiPost] ${path} - Request body after stringify:`, stringified);
+    // 检查 content 字段是否存在
+    if (body.type === 'NOTE' && !('content' in body)) {
+      console.warn('[apiPost] WARNING: NOTE type but content field missing in body!');
+    }
+  }
+  
   const res = await apiFetch(path, {
     method: "POST",
     body: body ? JSON.stringify(body) : undefined,

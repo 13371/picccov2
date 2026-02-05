@@ -363,3 +363,4 @@ Write-Host "`n✅ 所有验证完成！" -ForegroundColor Green
 5. ✅ **保持隐私硬拦截**: 普通接口永远拿不到 `isPrivate=true` 的 folder
 
 
+

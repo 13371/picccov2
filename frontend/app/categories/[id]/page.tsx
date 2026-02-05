@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiGet, apiPost, apiDelete, apiPatch, apiFetch } from "../../../lib/api";
+import MoreMenuButton from "@/components/MoreMenuButton";
+import BackButton from "../../components/BackButton";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import AlertDialog from "../../components/AlertDialog";
 
 interface Note {
   id: string;
@@ -31,6 +35,27 @@ export default function CategoryDetailPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showMenuId, setShowMenuId] = useState<string | null>(null);
+  
+  // 对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+    danger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    open: false,
+    message: "",
+    onConfirm: async () => {},
+  });
+  const [alertDialog, setAlertDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+  }>({
+    open: false,
+    message: "",
+  });
 
   // 加载 notes 列表
   const loadNotes = useCallback(async () => {
@@ -140,36 +165,39 @@ export default function CategoryDetailPage() {
     } catch (err) {
       console.error("创建失败:", err);
       const errorMsg = err instanceof Error ? err.message : "创建失败";
-      alert(errorMsg);
+      setAlertDialog({ open: true, message: errorMsg });
     } finally {
       setCreating(false);
     }
   };
 
   // 删除 NOTE
-  const deleteNote = async (noteId: string, e: React.MouseEvent) => {
+  const deleteNote = (noteId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // 二次确认
-    const confirmed = window.confirm("确认删除该记事？此操作不可恢复。");
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setDeletingId(noteId);
-      await apiDelete(`/items/${noteId}`);
-      await loadNotes();
-      alert("删除成功");
-    } catch (err) {
-      console.error("删除失败:", err);
-      const errorMsg = err instanceof Error ? err.message : "删除失败";
-      alert(errorMsg);
-    } finally {
-      setDeletingId(null);
-      setShowMenuId(null);
-    }
+    setConfirmDialog({
+      open: true,
+      title: "确认删除",
+      message: "确认删除该记事？此操作不可恢复。",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setDeletingId(noteId);
+          setConfirmDialog({ ...confirmDialog, open: false });
+          await apiDelete(`/items/${noteId}`);
+          await loadNotes();
+          setAlertDialog({ open: true, message: "删除成功" });
+        } catch (err) {
+          console.error("删除失败:", err);
+          const errorMsg = err instanceof Error ? err.message : "删除失败";
+          setAlertDialog({ open: true, message: errorMsg });
+        } finally {
+          setDeletingId(null);
+          setShowMenuId(null);
+        }
+      },
+    });
   };
 
   // 切换星标
@@ -185,7 +213,7 @@ export default function CategoryDetailPage() {
       setShowMenuId(null);
     } catch (err) {
       console.error("操作失败:", err);
-      alert(err instanceof Error ? err.message : "操作失败");
+      setAlertDialog({ open: true, message: err instanceof Error ? err.message : "操作失败" });
     }
   };
 
@@ -221,6 +249,45 @@ export default function CategoryDetailPage() {
     setSelectedIds(newSelected);
   };
 
+  // 批量删除
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) return;
+
+    const count = selectedIds.size;
+    setConfirmDialog({
+      open: true,
+      title: "确认删除",
+      message: `确定删除选中的 ${count} 条记事？此操作不可恢复`,
+      danger: true,
+      onConfirm: async () => {
+        const idsToDelete = Array.from(selectedIds);
+        const deletePromises = idsToDelete.map(id => apiDelete(`/items/${id}`));
+
+        try {
+          setConfirmDialog({ ...confirmDialog, open: false });
+          const results = await Promise.allSettled(deletePromises);
+          
+          // 检查是否有失败的
+          const failed = results.filter(r => r.status === 'rejected');
+          if (failed.length > 0) {
+            setAlertDialog({ open: true, message: "删除失败，请重试" });
+            return;
+          }
+
+          // 全部成功：乐观更新UI
+          const idsToDeleteSet = new Set(idsToDelete);
+          setNotes(prevNotes => prevNotes.filter(note => !idsToDeleteSet.has(note.id)));
+          setSelectedIds(new Set());
+          exitSelectionMode();
+          setAlertDialog({ open: true, message: `已删除 ${count} 条` });
+        } catch (err) {
+          console.error("批量删除失败:", err);
+          setAlertDialog({ open: true, message: "删除失败，请重试" });
+        }
+      },
+    });
+  };
+
   // 获取标题预览（无标题时显示content前N字）
   const getTitlePreview = (note: Note): string => {
     if (note.title && note.title.trim()) {
@@ -242,20 +309,7 @@ export default function CategoryDetailPage() {
         marginBottom: "16px",
         gap: "12px"
       }}>
-        <button
-          onClick={() => router.back()}
-          style={{
-            padding: "6px 12px",
-            fontSize: "14px",
-            backgroundColor: "#6c757d",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          返回
-        </button>
+        <BackButton />
         <h2 className="page-title" style={{ margin: 0, flex: 1 }}>
           分类详情
         </h2>
@@ -287,7 +341,7 @@ export default function CategoryDetailPage() {
               cursor: "pointer",
             }}
           >
-            完成
+            取消
           </button>
         )}
       </div>
@@ -309,11 +363,9 @@ export default function CategoryDetailPage() {
           >
             {selectedIds.size === notes.length ? "取消全选" : "全选"}
           </button>
-          {selectedIds.size > 0 && (
-            <span style={{ marginLeft: "12px", fontSize: "14px", color: "#666" }}>
-              已选 {selectedIds.size} 项
-            </span>
-          )}
+          <span style={{ marginLeft: "12px", fontSize: "14px", color: "#666" }}>
+            已选 {selectedIds.size} 项
+          </span>
         </div>
       )}
 
@@ -333,7 +385,7 @@ export default function CategoryDetailPage() {
               cursor: creating || loading ? "not-allowed" : "pointer",
             }}
           >
-            {creating ? "创建中…" : "新建 NOTE"}
+            {creating ? "创建中…" : "新建记事"}
           </button>
         </div>
       )}
@@ -363,7 +415,13 @@ export default function CategoryDetailPage() {
                 <input
                   type="checkbox"
                   checked={selectedIds.has(note.id)}
-                  onChange={() => toggleSelect(note.id)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    toggleSelect(note.id);
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
                   style={{
                     marginRight: "12px",
                     marginTop: "2px",
@@ -380,7 +438,11 @@ export default function CategoryDetailPage() {
                   overflow: "hidden",
                 }}
                 onClick={() => {
-                  if (!selectionMode) {
+                  if (selectionMode) {
+                    // 选择模式下点击卡片切换选中状态
+                    toggleSelect(note.id);
+                  } else {
+                    // 非选择模式下点击卡片打开编辑页
                     router.push(`/notes/${note.id}`);
                   }
                 }}
@@ -421,39 +483,15 @@ export default function CategoryDetailPage() {
 
               {/* 操作按钮（非选择模式） */}
               {!selectionMode && (
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: "12px" }}>
-                  <button
-                    onClick={() => router.push(`/notes/${note.id}`)}
-                    style={{
-                      padding: "6px 12px",
-                      fontSize: "12px",
-                      backgroundColor: "#007bff",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    编辑
-                  </button>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: "12px", paddingRight: "12px" }}>
                   <div style={{ position: "relative" }}>
-                    <button
+                    <MoreMenuButton
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         setShowMenuId(showMenuId === note.id ? null : note.id);
                       }}
-                      style={{
-                        padding: "6px 8px",
-                        fontSize: "16px",
-                        backgroundColor: "transparent",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "#666",
-                      }}
-                    >
-                      ⋮
-                    </button>
+                    />
                     {/* 菜单 */}
                     {showMenuId === note.id && (
                       <div
@@ -532,6 +570,41 @@ export default function CategoryDetailPage() {
         </div>
       )}
 
+      {/* 选择模式下的底部删除按钮 */}
+      {selectionMode && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: "16px",
+            backgroundColor: "#fff",
+            borderTop: "1px solid #e0e0e0",
+            boxShadow: "0 -2px 8px rgba(0,0,0,0.1)",
+            zIndex: 10,
+          }}
+        >
+          <button
+            onClick={handleBatchDelete}
+            disabled={selectedIds.size === 0}
+            style={{
+              width: "100%",
+              padding: "12px",
+              fontSize: "16px",
+              backgroundColor: selectedIds.size === 0 ? "#ccc" : "#dc3545",
+              color: "#fff",
+              border: "none",
+              borderRadius: "4px",
+              cursor: selectedIds.size === 0 ? "not-allowed" : "pointer",
+              fontWeight: 500,
+            }}
+          >
+            删除
+          </button>
+        </div>
+      )}
+
       {/* 点击外部关闭菜单 */}
       {showMenuId && (
         <div
@@ -546,6 +619,27 @@ export default function CategoryDetailPage() {
           onClick={() => setShowMenuId(null)}
         />
       )}
+
+      {/* 为底部删除按钮留出空间 */}
+      {selectionMode && <div style={{ height: "80px" }} />}
+
+      {/* 确认对话框 */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        danger={confirmDialog.danger}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ ...confirmDialog, open: false })}
+      />
+
+      {/* 提示对话框 */}
+      <AlertDialog
+        open={alertDialog.open}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        onClose={() => setAlertDialog({ ...alertDialog, open: false })}
+      />
     </div>
   );
 }

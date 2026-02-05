@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiGet, apiPost, apiPatch, apiDelete } from "../../lib/api";
+import ConfirmDialog from "../components/ConfirmDialog";
+import AlertDialog from "../components/AlertDialog";
 
 interface Folder {
   id: string;
@@ -25,6 +27,27 @@ export default function UrlsPage() {
   const [renameValue, setRenameValue] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  
+  // 对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+    danger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    open: false,
+    message: "",
+    onConfirm: async () => {},
+  });
+  const [alertDialog, setAlertDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+  }>({
+    open: false,
+    message: "",
+  });
 
   // 加载文件夹列表
   const loadFolders = async () => {
@@ -94,7 +117,7 @@ export default function UrlsPage() {
     if (!newFolderName.trim() || creating) return;
 
     if (newFolderName.length > 10) {
-      alert("文件夹名称最多 10 个字符");
+      setAlertDialog({ open: true, message: "文件夹名称最多 10 个字符" });
       return;
     }
 
@@ -108,11 +131,11 @@ export default function UrlsPage() {
       await loadFolders();
       setShowCreateModal(false);
       setNewFolderName("");
-      alert("创建成功");
+      setAlertDialog({ open: true, message: "创建成功" });
     } catch (err) {
       console.error("创建失败:", err);
       const errorMsg = err instanceof Error ? err.message : "创建失败";
-      alert(errorMsg);
+      setAlertDialog({ open: true, message: errorMsg });
     } finally {
       setCreating(false);
     }
@@ -131,7 +154,7 @@ export default function UrlsPage() {
       setShowMenuId(null);
     } catch (err) {
       console.error("操作失败:", err);
-      alert(err instanceof Error ? err.message : "操作失败");
+      setAlertDialog({ open: true, message: err instanceof Error ? err.message : "操作失败" });
     }
   };
 
@@ -146,7 +169,7 @@ export default function UrlsPage() {
     if (!showRenameModal || !renameValue.trim() || renaming) return;
 
     if (renameValue.length > 10) {
-      alert("文件夹名称最多 10 个字符");
+      setAlertDialog({ open: true, message: "文件夹名称最多 10 个字符" });
       return;
     }
 
@@ -159,38 +182,41 @@ export default function UrlsPage() {
       setShowRenameModal(null);
       setRenameValue("");
       setShowMenuId(null);
-      alert("重命名成功");
+      setAlertDialog({ open: true, message: "重命名成功" });
     } catch (err) {
       console.error("重命名失败:", err);
-      alert(err instanceof Error ? err.message : "重命名失败");
+      setAlertDialog({ open: true, message: err instanceof Error ? err.message : "重命名失败" });
     } finally {
       setRenaming(false);
     }
   };
 
   // 删除文件夹
-  const handleDelete = async (folderId: string, e: React.MouseEvent) => {
+  const handleDelete = (folderId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // 二次确认
-    const confirmed = window.confirm("确认删除该文件夹？此操作不可恢复。");
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setDeletingId(folderId);
-      await apiDelete(`/folders/${folderId}`);
-      await loadFolders();
-      alert("删除成功");
-    } catch (err) {
-      console.error("删除失败:", err);
-      alert(err instanceof Error ? err.message : "删除失败");
-    } finally {
-      setDeletingId(null);
-      setShowMenuId(null);
-    }
+    setConfirmDialog({
+      open: true,
+      title: "确认删除",
+      message: "确认删除该文件夹？此操作不可恢复。",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setDeletingId(folderId);
+          setConfirmDialog({ ...confirmDialog, open: false });
+          await apiDelete(`/folders/${folderId}`);
+          await loadFolders();
+          setAlertDialog({ open: true, message: "删除成功" });
+        } catch (err) {
+          console.error("删除失败:", err);
+          setAlertDialog({ open: true, message: err instanceof Error ? err.message : "删除失败" });
+        } finally {
+          setDeletingId(null);
+          setShowMenuId(null);
+        }
+      },
+    });
   };
 
   return (
@@ -597,6 +623,24 @@ export default function UrlsPage() {
           onClick={() => setShowMenuId(null)}
         />
       )}
+
+      {/* 确认对话框 */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        danger={confirmDialog.danger}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ ...confirmDialog, open: false })}
+      />
+
+      {/* 提示对话框 */}
+      <AlertDialog
+        open={alertDialog.open}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        onClose={() => setAlertDialog({ ...alertDialog, open: false })}
+      />
     </div>
   );
 }

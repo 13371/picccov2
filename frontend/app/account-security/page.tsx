@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getToken } from '../lib/auth';
 import { apiPost } from '../../lib/api';
+import BackButton from '../components/BackButton';
+import AlertDialog from '../components/AlertDialog';
 
 export default function AccountSecurityPage() {
   const router = useRouter();
@@ -13,6 +15,16 @@ export default function AccountSecurityPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  
+  // 对话框状态
+  const [alertDialog, setAlertDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+  }>({
+    open: false,
+    message: "",
+  });
 
   useEffect(() => {
     const token = getToken();
@@ -81,12 +93,15 @@ export default function AccountSecurityPage() {
   };
 
   const handleResetPinClick = () => {
-    alert('通过邮箱验证码重置功能即将支持，敬请期待！');
+    setAlertDialog({ open: true, message: '通过邮箱验证码重置功能即将支持，敬请期待！' });
   };
 
   return (
     <div className="page-container">
-      <h2 className="page-title">账号与安全</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+        <BackButton />
+        <h2 className="page-title" style={{ margin: 0 }}>账号与安全</h2>
+      </div>
       <div style={{ padding: '20px' }}>
         {/* 模块1：修改隐私文件夹密码 */}
         <div style={{ marginBottom: '40px' }}>
@@ -212,6 +227,14 @@ export default function AccountSecurityPage() {
           </button>
         </div>
       </div>
+
+      {/* 提示对话框 */}
+      <AlertDialog
+        open={alertDialog.open}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        onClose={() => setAlertDialog({ ...alertDialog, open: false })}
+      />
     </div>
   );
 }

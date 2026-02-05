@@ -219,7 +219,8 @@ export class ItemsService {
     },
   ) {
     // 验证必填字段
-    if (data.type === ItemType.NOTE && !data.content) {
+    // 注意：content 字段必须存在（不能是 undefined），但允许为空字符串 ""（支持快速新建空白 NOTE）
+    if (data.type === ItemType.NOTE && data.content === undefined) {
       throw new BadRequestException('NOTE 类型必须提供 content');
     }
     if (data.type === ItemType.URL && !data.url) {
@@ -443,7 +444,8 @@ export class ItemsService {
    * 创建隐私 item（仅 NOTE）
    */
   async createPrivateItem(userId: string, data: { title?: string; content: string }) {
-    if (!data.content) {
+    // 注意：content 字段必须存在（不能是 undefined），但允许为空字符串 ""（支持快速新建空白 NOTE）
+    if (data.content === undefined) {
       throw new BadRequestException('NOTE 类型必须提供 content');
     }
 

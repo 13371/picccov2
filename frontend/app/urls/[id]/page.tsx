@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiGet, apiPost, apiPatch, apiDelete } from "../../../lib/api";
+import MoreMenuButton from "@/components/MoreMenuButton";
+import BackButton from "../../components/BackButton";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import AlertDialog from "../../components/AlertDialog";
 
 interface UrlItem {
   id: string;
@@ -37,6 +41,27 @@ export default function UrlFolderDetailPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showMenuId, setShowMenuId] = useState<string | null>(null);
+  
+  // 对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+    danger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    open: false,
+    message: "",
+    onConfirm: async () => {},
+  });
+  const [alertDialog, setAlertDialog] = useState<{
+    open: boolean;
+    title?: string;
+    message: string;
+  }>({
+    open: false,
+    message: "",
+  });
 
   // 加载 URLs 列表
   const loadUrls = useCallback(async () => {
@@ -126,7 +151,7 @@ export default function UrlFolderDetailPage() {
     if (!url.trim() || creating) return;
 
     if (!url.trim()) {
-      alert("URL 不能为空");
+      setAlertDialog({ open: true, message: "URL 不能为空" });
       return;
     }
 
@@ -141,11 +166,11 @@ export default function UrlFolderDetailPage() {
 
       await loadUrls();
       handleCloseModal();
-      alert("创建成功");
+      setAlertDialog({ open: true, message: "创建成功" });
     } catch (err) {
       console.error("创建失败:", err);
       const errorMsg = err instanceof Error ? err.message : "创建失败";
-      alert(errorMsg);
+      setAlertDialog({ open: true, message: errorMsg });
     } finally {
       setCreating(false);
     }
@@ -156,7 +181,7 @@ export default function UrlFolderDetailPage() {
     if (!editingUrl || !url.trim() || saving) return;
 
     if (!url.trim()) {
-      alert("URL 不能为空");
+      setAlertDialog({ open: true, message: "URL 不能为空" });
       return;
     }
 
@@ -169,40 +194,43 @@ export default function UrlFolderDetailPage() {
 
       await loadUrls();
       handleCloseModal();
-      alert("保存成功");
+      setAlertDialog({ open: true, message: "保存成功" });
     } catch (err) {
       console.error("保存失败:", err);
       const errorMsg = err instanceof Error ? err.message : "保存失败";
-      alert(errorMsg);
+      setAlertDialog({ open: true, message: errorMsg });
     } finally {
       setSaving(false);
     }
   };
 
   // 删除 URL
-  const handleDeleteUrl = async (urlId: string, e: React.MouseEvent) => {
+  const handleDeleteUrl = (urlId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // 二次确认
-    const confirmed = window.confirm("确认删除该网址？此操作不可恢复。");
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setDeletingId(urlId);
-      await apiDelete(`/items/${urlId}`);
-      await loadUrls();
-      alert("删除成功");
-    } catch (err) {
-      console.error("删除失败:", err);
-      const errorMsg = err instanceof Error ? err.message : "删除失败";
-      alert(errorMsg);
-    } finally {
-      setDeletingId(null);
-      setShowMenuId(null);
-    }
+    setConfirmDialog({
+      open: true,
+      title: "确认删除",
+      message: "确认删除该网址？此操作不可恢复。",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setDeletingId(urlId);
+          setConfirmDialog({ ...confirmDialog, open: false });
+          await apiDelete(`/items/${urlId}`);
+          await loadUrls();
+          setAlertDialog({ open: true, message: "删除成功" });
+        } catch (err) {
+          console.error("删除失败:", err);
+          const errorMsg = err instanceof Error ? err.message : "删除失败";
+          setAlertDialog({ open: true, message: errorMsg });
+        } finally {
+          setDeletingId(null);
+          setShowMenuId(null);
+        }
+      },
+    });
   };
 
   // 切换星标
@@ -218,15 +246,37 @@ export default function UrlFolderDetailPage() {
       setShowMenuId(null);
     } catch (err) {
       console.error("操作失败:", err);
-      alert(err instanceof Error ? err.message : "操作失败");
+      setAlertDialog({ open: true, message: err instanceof Error ? err.message : "操作失败" });
     }
   };
 
   // 点击 URL 条目：在新 tab 打开
   const handleUrlClick = (item: UrlItem) => {
-    if (item.url && !selectionMode) {
-      window.open(item.url, "_blank", "noopener,noreferrer");
+    if (selectionMode) return;
+    
+    if (!item.url || !item.url.trim()) {
+      setAlertDialog({ open: true, message: "链接无效" });
+      return;
     }
+    
+    // 规范化 URL
+    let normalizedUrl = item.url.trim();
+    
+    // 如果不以 http:// 或 https:// 开头，则自动补 https://
+    if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
+      normalizedUrl = "https://" + normalizedUrl;
+    }
+    
+    // 简单验证：确保 URL 格式基本有效
+    try {
+      new URL(normalizedUrl);
+    } catch {
+      setAlertDialog({ open: true, message: "链接无效" });
+      return;
+    }
+    
+    // 在新标签页打开
+    window.open(normalizedUrl, "_blank", "noopener,noreferrer");
   };
 
   // 进入选择模式
@@ -271,20 +321,7 @@ export default function UrlFolderDetailPage() {
         marginBottom: "16px",
         gap: "12px"
       }}>
-        <button
-          onClick={() => router.back()}
-          style={{
-            padding: "6px 12px",
-            fontSize: "14px",
-            backgroundColor: "#6c757d",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          返回
-        </button>
+        <BackButton />
         <h2 className="page-title" style={{ margin: 0, flex: 1 }}>
           URL 文件夹
         </h2>
@@ -447,43 +484,15 @@ export default function UrlFolderDetailPage() {
 
               {/* 操作按钮（非选择模式） */}
               {!selectionMode && (
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: "12px" }}>
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleOpenEditModal(item);
-                    }}
-                    style={{
-                      padding: "6px 12px",
-                      fontSize: "12px",
-                      backgroundColor: "#007bff",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    编辑
-                  </button>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: "12px", paddingRight: "12px" }}>
                   <div style={{ position: "relative" }}>
-                    <button
+                    <MoreMenuButton
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         setShowMenuId(showMenuId === item.id ? null : item.id);
                       }}
-                      style={{
-                        padding: "6px 8px",
-                        fontSize: "16px",
-                        backgroundColor: "transparent",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "#666",
-                      }}
-                    >
-                      ⋮
-                    </button>
+                    />
                     {/* 菜单 */}
                     {showMenuId === item.id && (
                       <div
@@ -858,6 +867,24 @@ export default function UrlFolderDetailPage() {
           onClick={() => setShowMenuId(null)}
         />
       )}
+
+      {/* 确认对话框 */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        danger={confirmDialog.danger}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ ...confirmDialog, open: false })}
+      />
+
+      {/* 提示对话框 */}
+      <AlertDialog
+        open={alertDialog.open}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        onClose={() => setAlertDialog({ ...alertDialog, open: false })}
+      />
     </div>
   );
 }

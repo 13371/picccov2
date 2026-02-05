@@ -8,8 +8,8 @@ import { apiGet } from '../../lib/api';
 
 export default function MePage() {
   const router = useRouter();
-  const [isUnlocked, setIsUnlocked] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState<string>('');
+  const [emailLoading, setEmailLoading] = useState(true);
 
   useEffect(() => {
     const token = getToken();
@@ -18,38 +18,22 @@ export default function MePage() {
       return;
     }
 
-    // 调用后端接口校准解锁状态
-    const syncUnlockStatus = async () => {
+    // 获取用户邮箱
+    const fetchEmail = async () => {
       try {
-        const response = await apiGet('/private/status');
+        const response = await apiGet('/auth/me');
         if (response.success && response.data) {
-          const { unlocked } = response.data;
-          
-          // 根据后端真实状态校准 localStorage
-          if (unlocked) {
-            localStorage.setItem('piccco_private_unlocked', '1');
-            setIsUnlocked(true);
-          } else {
-            localStorage.removeItem('piccco_private_unlocked');
-            setIsUnlocked(false);
-          }
+          setEmail(response.data.email || '');
         }
       } catch (err) {
-        // 如果接口失败，使用 localStorage 的缓存值
-        const unlocked = localStorage.getItem('piccco_private_unlocked') === '1';
-        setIsUnlocked(unlocked);
+        console.error('获取用户邮箱失败:', err);
       } finally {
-        setLoading(false);
+        setEmailLoading(false);
       }
     };
 
-    syncUnlockStatus();
+    fetchEmail();
   }, [router]);
-
-  const handleLock = () => {
-    localStorage.removeItem('piccco_private_unlocked');
-    setIsUnlocked(false);
-  };
 
   const handleLogout = () => {
     localStorage.removeItem('piccco_token');
@@ -57,67 +41,59 @@ export default function MePage() {
     router.replace('/login');
   };
 
+  const menuItems = [
+    { label: '信息中心', href: '/me/messages' },
+    { label: '设置', href: '/settings' },
+    { label: '账号与安全', href: '/account-security' },
+    { label: '帮助与反馈', href: '/me/feedback' },
+    { label: '关于', href: '/me/about' },
+  ];
+
   return (
     <div className="page-container">
       <h2 className="page-title">我的</h2>
-      <div style={{ padding: '20px' }}>
-        {loading ? (
-          <div style={{ marginBottom: '20px' }}>
-            <p>加载中...</p>
-          </div>
-        ) : isUnlocked ? (
-          <div style={{ marginBottom: '20px' }}>
-            <p style={{ marginBottom: '12px' }}>隐私状态：已解锁</p>
-            <button
-              onClick={handleLock}
-              style={{
-                padding: '8px 16px',
-                fontSize: '14px',
-                backgroundColor: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              点击锁定
-            </button>
-          </div>
+      
+      {/* 顶部：邮箱 */}
+      <div style={{ padding: '20px', borderBottom: '1px solid #e0e0e0' }}>
+        {emailLoading ? (
+          <p style={{ color: '#666' }}>加载中...</p>
         ) : (
-          <div style={{ marginBottom: '20px' }}>
-            <p>隐私状态：未解锁</p>
-          </div>
+          <p style={{ fontSize: '16px', fontWeight: '500' }}>
+            {email || '未获取到邮箱'}
+          </p>
         )}
       </div>
 
-      {/* 账号与安全入口 */}
-      <div style={{ padding: '20px', borderTop: '1px solid #e0e0e0', marginTop: '20px' }}>
-        <Link
-          href="/account-security"
-          style={{
-            display: 'block',
-            padding: '12px 16px',
-            fontSize: '16px',
-            color: '#333',
-            textDecoration: 'none',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            backgroundColor: '#f8f9fa',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#e9ecef';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#f8f9fa';
-          }}
-        >
-          账号与安全
-        </Link>
+      {/* 中部：5个入口列表 */}
+      <div style={{ padding: '20px 0' }}>
+        {menuItems.map((item, index) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            style={{
+              display: 'block',
+              padding: '16px 20px',
+              fontSize: '16px',
+              color: '#333',
+              textDecoration: 'none',
+              borderBottom: index < menuItems.length - 1 ? '1px solid #e0e0e0' : 'none',
+              backgroundColor: '#fff',
+              transition: 'background-color 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f8f9fa';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#fff';
+            }}
+          >
+            {item.label}
+          </Link>
+        ))}
       </div>
 
-      {/* 退出登录按钮 */}
-      <div style={{ padding: '20px', borderTop: '1px solid #e0e0e0' }}>
+      {/* 底部：退出登录按钮 */}
+      <div style={{ padding: '20px', borderTop: '1px solid #e0e0e0', marginTop: '20px' }}>
         <button
           onClick={handleLogout}
           style={{
@@ -133,17 +109,6 @@ export default function MePage() {
         >
           退出登录
         </button>
-      </div>
-
-      <p className="page-placeholder">
-        这里是我的页面占位（后续展示邮箱、信息中心/设置/帮助与反馈/关于）
-      </p>
-      <div className="placeholder-content">
-        <p>内容区域可滚动</p>
-        <p>Header 和 TabBar 固定不动</p>
-        {Array.from({ length: 20 }).map((_, i) => (
-          <p key={i}>占位内容 {i + 1}</p>
-        ))}
       </div>
     </div>
   );

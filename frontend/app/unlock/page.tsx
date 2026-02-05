@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiGet, apiPost } from '../../lib/api';
 import { getToken } from '../lib/auth';
+import BackButton from '../components/BackButton';
 
 export default function UnlockPage() {
   const router = useRouter();
@@ -106,7 +107,10 @@ export default function UnlockPage() {
   if (checkingStatus) {
     return (
       <div className="page-container">
-        <h2 className="page-title">隐私解锁</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          <BackButton />
+          <h2 className="page-title" style={{ margin: 0 }}>隐私解锁</h2>
+        </div>
         <div style={{ padding: '20px' }}>
           <p>加载中...</p>
         </div>
@@ -118,7 +122,10 @@ export default function UnlockPage() {
 
   return (
     <div className="page-container">
-      <h2 className="page-title">{isSetupMode ? '设置隐私密码' : '隐私解锁'}</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        <BackButton />
+        <h2 className="page-title" style={{ margin: 0 }}>{isSetupMode ? '设置隐私密码' : '隐私解锁'}</h2>
+      </div>
       <div style={{ padding: '20px' }}>
         <input
           type="password"
